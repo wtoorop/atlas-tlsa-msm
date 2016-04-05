@@ -18,6 +18,22 @@ dns_query_resolvers   = dns( '_5001._tcp.cheetara.huque.com'
 			   , retry = 3
                            )
 
+targeting_8888   = set()
+scheduled_8888   = shelve.open('shelves/8888-scheduled.db')
+dns_query_8888   = dns( '_5001._tcp.cheetara.huque.com'
+                           , 'TLSA'
+                           , description = 'Can query TLSA record'
+                           , is_public = True
+			   , target = '8.8.8.8'
+			   , recursion_desired = True
+                           , do = True
+			   , cd = True
+                           , prepend_probe_id = False
+                           , udp_payload_size = 4096
+			   , retry = 3
+                           )
+
+
 def schedule(experiment, dns_query, scheduled, targeting):
 	print( 'targeting %d probes for experiment %s'
 	     % (len(targeting), experiment))
@@ -36,23 +52,39 @@ def schedule(experiment, dns_query, scheduled, targeting):
 		scheduled[prb_id] = msm_id
 	scheduled.sync()
 
-for p in atlas.probe(status=1):
+for p in atlas.probe(status=1, limit=100):
 	prb_id = str(p['id'])
 
-	if prb_id not in scheduled_resolver:
-		targeting_resolver.add(prb_id)
-	if len(targeting_resolver) == 1000:
-		schedule(          'resolver', dns_query_resolver
-		        , scheduled_resolver , targeting_resolver )
-		targeting_resolver = set()
+	if prb_id not in scheduled_resolvers:
+		targeting_resolvers.add(prb_id)
+	if len(targeting_resolvers) == 1000:
+		schedule(          'resolvers', dns_query_resolvers
+		        , scheduled_resolvers , targeting_resolvers )
+		targeting_resolvers = set()
+
+	if prb_id not in scheduled_8888:
+		targeting_8888.add(prb_id)
+	if len(targeting_8888) == 1000:
+		schedule(          '8888', dns_query_8888
+		        , scheduled_8888 , targeting_8888 )
+		targeting_8888 = set()
 
 
-if len(targeting_baseline) > 50:
-	schedule(          'baseline', dns_query_baseline
-	        , scheduled_baseline , targeting_baseline )
+if len(targeting_resolvers) > 50:
+	schedule(          'resolvers', dns_query_resolvers
+	        , scheduled_resolvers , targeting_resolvers )
 else:
-	print('not scheduling baseline, targeted # probes too small: %d\n'
-	     % len(targeting_baseline))
+	print('not scheduling resolvers, targeted # probes too small: %d\n'
+	     % len(targeting_resolvers))
 
-scheduled_baseline.close()
+if len(targeting_8888) > 50:
+	schedule(          '8888', dns_query_8888
+	        , scheduled_8888 , targeting_8888 )
+else:
+	print('not scheduling 8888, targeted # probes too small: %d\n'
+	     % len(targeting_8888))
+
+
+scheduled_resolvers.close()
+scheduled_8888.close()
 
